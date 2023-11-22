@@ -1,0 +1,2 @@
+config wds 'main'
+        option dfs_test '0'

@@ -1,0 +1,29 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2015 ruijie
+
+START=22
+STOP=100
+
+start() {
+    [ -d /sys/class/gpio/gpio2 ] || echo 2 > /sys/class/gpio/export
+    [ -d /sys/class/gpio/gpio3 ] || echo 3 > /sys/class/gpio/export
+    echo "starting wds gpio"
+    /sbin/rg_wds_gpio &
+    /sbin/wds_gpio.sh &
+    /sbin/wds_manage_ssid.sh &
+    /sbin/wds_process_monitor &
+}
+
+stop() {
+    killall rg_wds_gpio
+    echo "stop wds gpio."
+}
+
+boot() {
+    start "$@"
+}
+
+restart() {
+    stop "$@"
+    start "$@"
+}

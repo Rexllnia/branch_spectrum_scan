@@ -1,0 +1,101 @@
+#!/bin/sh
+
+. /usr/share/libubox/jshn.sh
+
+upgrd_filename="/tmp/firmware.img"
+
+
+RG_CONFIG_TMP_DIR="/tmp/rg_config/"
+# tipc_verchk模块log文件
+TIPC_VERCHK_CONFIG_LOG="${RG_CONFIG_TMP_DIR}tipc_verchk_config.log"
+
+debug() {
+    local time=$(date "+%H:%M:%S")
+    echo -e "[$time][$$]$1"  >> ${TIPC_VERCHK_CONFIG_LOG}
+}
+
+version_check() {
+    local file_name=$1
+    local tar_result
+    local dev_type
+    local ver_num
+    local img_ver_file 
+    local img_pids_file
+
+    # 解压的文件有问题：可能是解压错误、或者下载不全
+    # tar -zxf "$file_name" -C /tmp/ 2>/dev/null
+    img_ver_file=$(tar -ztf $file_name 2>/dev/null | grep -F .version)
+    img_pids_file=$(tar -ztf $file_name 2>/dev/null | grep -F .support_pids)
+
+    tar -zxf $file_name "$img_ver_file" "$img_pids_file" -C /tmp/ 2>/dev/null
+    if [  $? -eq 1 ]; then
+        debug "firmware.img format error."
+        json_add_string 'devtype' ''
+        json_add_string 'softversion' ''
+        return 3
+    fi
+	#ls > /tmp/firmware_file_log
+    dev_type=$(cat /tmp/AP_3.0*.support_pids|awk -F ',' '{for(n=1;n<=NF;n++){print $n}}'|awk -F '::' '{print $1}'| uniq | tr "\n" ";" | sed 's/.$//' ) 2>/dev/null
+    version=$(cat /tmp/AP_3.0*.version ) 2>/dev/null
+    if [  -z "$dev_type" ] || [ -z "$version" ]; then
+        debug "dev_type or version is NULL!"
+        json_add_string 'devtype' ''
+        json_add_string 'softversion' ''
+        return 3
+    fi
+
+	json_add_string 'devtype' "$dev_type"
+	debug "devtype:$dev_type"
+	
+    json_add_string 'softversion' "$version"
+    debug "version:$version"
+	
+	dev_model=$(cat /proc/rg_sys/product_class)
+    match_ret=$(cat /tmp/AP_3.0*.support_pids | grep "$dev_model" -o | uniq)
+	debug "match_ret:$match_ret"
+    if [ "$match_ret" != "$dev_model" -o -z "$match_ret" ]; then
+        debug "dev_type unmatch.[$(cat /proc/rg_sys/product_class)]"
+        return 1
+    fi
+	
+    ver_num=$(echo $version | awk -F 'Release' '{print $2}' |tr -cd "[0-9]")
+    if [ $ver_num -le $(cat /proc/rg_sys/software_version | awk -F 'Release' '{print $2}' |tr -cd "[0-9]") ]; then
+        debug "ver_num unmatch.[$(cat /proc/rg_sys/software_version | awk -F 'Release' '{print $2}' |tr -cd "[0-9]")]"
+        return 2
+    fi
+    
+    debug "version OK!"
+
+    return 0
+}
+
+tipc_verchk_get() {
+    local ret
+
+    #初始化
+    json_init
+    if [ ! -f "$upgrd_filename" ]; then
+        debug "firmware.img no exist."
+        json_add_string 'code' '-1'
+        json_add_string 'devtype' ''
+        json_add_string 'softversion' ''
+    else
+        version_check $upgrd_filename
+		
+        ret=$(echo $?)
+        json_add_string 'code' "$ret"
+    fi
+    json_dump
+	
+    rm -rf /tmp/AP_3.0* 2>/dev/null
+}
+
+# LOG文件大小限制500行
+if [ -e ${TIPC_VERCHK_CONFIG_LOG} ]; then
+    log_line=$(cat ${TIPC_VERCHK_CONFIG_LOG} | wc -l)
+    [ ${log_line} -gt 500 ] && { rm -rf ${TIPC_VERCHK_CONFIG_LOG}; }
+fi
+
+echo -e "\n" >> ${TIPC_VERCHK_CONFIG_LOG}
+echo "************$(date "+%Y-%m-%d %H:%M:%S")************" >> ${TIPC_VERCHK_CONFIG_LOG} 
+echo "$0 $*" >> ${TIPC_VERCHK_CONFIG_LOG}

@@ -1,0 +1,40 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2015 ruijie
+
+START=99
+STOP=100
+
+PROC1="/sbin/rg_tipc_server_shell"
+PROC2="/sbin/rg_tipc_server_ping"
+PROC3="/sbin/rg_tipc_ping.sh"
+PROC4="/sbin/rg_tipc_server_upgrade"
+PROC5="/sbin/rg_tipc_server_download"
+SERVICE_DAEMONIZE=1
+start() {
+        echo "starting tipc"
+        #service_start /sbin/rg_tipc_config
+        service_start $PROC1
+        service_start $PROC2
+        service_start $PROC3
+        service_start $PROC4
+        service_start $PROC5
+}
+
+stop() {
+        echo "tipc has stoped."
+        service_stop $PROC5
+        service_stop $PROC4
+        service_stop $PROC3
+        service_stop $PROC1
+        killall rg_tipc_ping.sh
+}
+
+boot() {
+        start "$@"
+}
+
+restart() {
+        echo "tipc has restart..."
+        stop "$@"
+        start "$@"
+}

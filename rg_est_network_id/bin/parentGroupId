@@ -1,0 +1,81 @@
+#!/bin/sh
+
+. /usr/share/libubox/jshn.sh
+
+# 配置生成文件
+NETWORKID_JSON="/etc/rg_config/networkid.json"
+# log配置生成文件
+PARENTGROUPID_LOG="/tmp/rg_config/parentGroupId_config.log"
+
+#$1
+# {"parentGroupId":"xxxxx"}
+parentGroupId_set() {
+    flock -x 90
+    local default_pgi
+    local lnidArgs="$1"
+    json_load "$lnidArgs"
+    [ $? -ne 0 ] && {
+        echo "json is error" >> "$PARENTGROUPID_LOG"
+        flock -u 90
+        return 1
+    }
+    
+    json_get_var parentGroupId "parentGroupId"
+    if [ ${#parentGroupId} -gt 16 ]; then
+        echo "parentGroupId  is error" >> "$PARENTGROUPID_LOG"
+        flock -u 90
+        return 1
+    fi
+
+    if [ ! -f "$NETWORKID_JSON" ]; then
+        echo "networkid.json isnt exist!" >> "$PARENTGROUPID_LOG"
+        flock -u 90
+        return 1
+    fi
+
+    default_pgi=$(cat "$NETWORKID_JSON" | jq -r '.parentGroupId'|sed 's/\"//g')
+
+    lcl_param=$(cat /etc/rg_config/networkid.json 2>/dev/null | jq .)
+    json_load "$lcl_param"
+    if [ $? -ne 0 ]; then
+        echo "lcl_param json is error, wrt default config." >> "$NETWORKID_LOG"
+        rm -rf /etc/rg_config/networkid.json
+        echo "$networkid_default" > "$NETWORKID_JSON"
+        default_id="0"
+        default_name="default"
+        default_gid="0"
+        default_gnm="default"
+        default_pgi=""
+    else
+        json_get_var default_id "networkId"
+        json_get_var default_name "networkName"
+        json_get_var default_gid "groupId"
+        json_get_var default_gnm "groupName"
+        json_get_var default_pgi "parentGroupId"    
+    fi
+
+    if [ "$parentGroupId" != "$default_pgi" ]; then
+        echo "write networkId" >> "$NETWORKID_LOG"
+        json_init
+        json_add_string 'networkId' "$default_id"
+        json_add_string 'networkName' "$default_name"
+        json_add_string 'groupId' "$default_gid"
+        json_add_string 'groupName' "$default_gnm"
+        json_add_string 'parentGroupId' "$parentGroupId"
+        est_ret=$(json_dump)
+        echo "$est_ret" > "$NETWORKID_JSON"
+        echo "est_ret:$est_ret" >> "$NETWORKID_LOG"
+        echo "[new][$parentGroupId]write parentGroupId[old][$default_pgi]" >> "$PARENTGROUPID_LOG"
+        #sed -i "s/\"parentGroupId\":.*$/\"parentGroupId\":\"$parentGroupId\"/" "$NETWORKID_JSON"
+    else
+        echo "parentGroupId[$parentGroupId] == default_pgi[$default_pgi]" >> "$PARENTGROUPID_LOG"
+    fi
+    
+    flock -u 90
+    return 0
+}
+
+if [ -e "$PARENTGROUPID_LOG" ]; then
+        log_line=$(cat "$PARENTGROUPID_LOG" | wc -l)
+        [ $log_line -gt 500 ] && { rm -rf "$PARENTGROUPID_LOG"; }
+fi

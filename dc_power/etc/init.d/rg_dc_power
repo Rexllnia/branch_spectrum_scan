@@ -1,0 +1,43 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2018 ruijie
+
+. /usr/share/libubox/jshn.sh
+START=99
+STOP=100
+
+SERVICE_DAEMONIZE=1
+
+RG_DEVICE_JSON_FILE="/tmp/rg_device/rg_device.json"
+DC_JSON_FILE="/etc/rg_config/single/dcOutputConfig.json"
+
+start() {
+	if [ -f "$RG_DEVICE_JSON_FILE" ];then
+		GPIO_PORT=$(jq -r '.dc_power.gpio_port' $RG_DEVICE_JSON_FILE)
+		if [ null = $GPIO_PORT ]; then
+		  echo "gpio port get error"
+		  return
+		fi
+	else
+		echo "$RG_DEVICE_JSON_FILE not found"
+		return
+	fi
+	DC_GPIO_VALUE_FILE="/sys/class/gpio/gpio$GPIO_PORT/value"
+	if [ ! -f "$DC_GPIO_VALUE_FILE" ];then
+		echo "$DC_GPIO_VALUE_FILE not found, export and set gpio direction"
+		echo $GPIO_PORT> /sys/class/gpio/export
+	fi
+	echo out > /sys/class/gpio/gpio$GPIO_PORT/direction
+	
+	if [ -f "$DC_JSON_FILE" ];then
+		switch=$(jq -r '.enable' $DC_JSON_FILE)
+		echo $switch > /sys/class/gpio/gpio$GPIO_PORT/value
+		echo "$DC_JSON_FILE found, according to file set $switch"		
+	else
+		echo 1 > /sys/class/gpio/gpio$GPIO_PORT/value 
+		echo "$DC_JSON_FILE not found, default enable set 1"
+	fi
+}
+
+stop() {
+	echo "stop fun do nothing"
+}

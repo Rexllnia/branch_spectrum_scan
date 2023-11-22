@@ -1,0 +1,50 @@
+#!/bin/sh
+
+. /usr/share/libubox/jshn.sh
+# 易网络统一框架接口，设置rmt_mngssid
+
+# log配置生成文件
+RMT_MNGSSID_LOG="/tmp/rg_config/rmt_mngssid_config.log"
+
+rmt_mngssid_set() {
+    local param=$1
+    local disable
+    flock -x 90
+
+    echo "********************$(date "+%Y-%m-%d %H:%M:%S")**********************" >> "$RMT_MNGSSID_LOG"
+    echo "[set]param: $param" >> "$RMT_MNGSSID_LOG"
+
+    json_load "$param"
+    [ $? -ne 0 ] && {
+        echo "json is error" >> "$RMT_MNGSSID_LOG"
+        flock -u 90
+        return 1
+    }
+
+    json_get_var mngssidStatus "mngssidStatus"
+    echo "mngssidStatus[$mngssidStatus]" >> "$RMT_MNGSSID_LOG"
+    if [ -z "$mngssidStatus" ]; then
+        echo "mngssidStatus is NULL!" >> "$RMT_MNGSSID_LOG"
+        flock -u 90
+        return 1
+    fi
+
+    if [ "$mngssidStatus" == "true" ]; then
+        disable=1
+    elif [ "$mngssidStatus" == "false" ]; then
+        disable=0
+    else
+        echo "status is error!" >> "$RMT_MNGSSID_LOG"
+    fi
+    echo "disable[$disable]" >> "$RMT_MNGSSID_LOG"
+    #uci set wireless.@wifi-iface[1].disabled=$disable && uci commit wireless
+
+    flock -u 90
+
+    return 0
+}
+
+if [ -e "$RMT_MNGSSID_LOG" ]; then
+        log_line=$(cat "$RMT_MNGSSID_LOG" | wc -l)
+        [ $log_line -gt 500 ] && { rm -rf "$RMT_MNGSSID_LOG"; }
+fi

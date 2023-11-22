@@ -1,0 +1,57 @@
+#!/bin/sh
+
+RG_CONFIG_TMP_DIR="/tmp/rg_config/"
+EST_TIPC_CONFIG_LOG="${RG_CONFIG_TMP_DIR}tipc_config.log"
+
+netid="1127"
+addr="1.1."
+
+est_type=`uci get sysinfo.@sysinfo[0].product_class`
+sys_mac=`uci get sysinfo.@sysinfo[0].sys_mac`
+node_addr=`rg_tipc_mac_to_nodeadd $sys_mac | awk -F ':' '{printf $2}'`
+node_addr=$addr$node_addr
+echo "$node_addr" > /tmp/.tipc_node_address
+
+tipc-config -netid=$netid -addr=$node_addr
+
+
+est_dbg() {
+    local time=$(date "+%H:%M:%S")
+    echo -e "[$time][$$]$1"  >> ${EST_TIPC_CONFIG_LOG}
+}
+est_dbg "\n********************$(date "+%Y-%m-%d %H:%M:%S")**********************"
+
+tipc_binding_to_brwan(){
+	tipc-config -bd=eth:br-wan
+	sleep 1
+	tipc-config -be=eth:br-wan
+}
+
+is_binding_success(){
+	local interface=$(tipc-config -b |grep br-wan)
+	if [ -n "$interface" ];then
+		est_dbg "tipc binding brwan success"
+		return 1
+	fi
+	est_dbg "tipc binding brwan fail"
+	return 0
+}
+
+#br-wan重新创建的时候需要重新绑定,直到绑定成功
+while true
+do
+	sleep 1
+	tipc_binding_to_brwan
+	is_binding_success
+	if [ $? == 1 ];then
+		est_dbg "while break"
+		break
+	fi
+	est_dbg "while continue"
+done
+
+#log文件大小限20k
+if [ -e ${EST_TIPC_CONFIG_LOG} ]; then
+    local est_model_log_byte=$(ls -l ${EST_TIPC_CONFIG_LOG} | awk '{print $5}')
+    [ ${est_model_log_byte} -gt 20000 ] && { mv -f ${EST_TIPC_CONFIG_LOG} ${EST_TIPC_CONFIG_LOG}.old; }
+fi

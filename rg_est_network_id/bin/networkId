@@ -1,0 +1,155 @@
+#!/bin/sh
+
+. /usr/share/libubox/jshn.sh
+# 易网络统一框架接口，设置/获取networkId
+
+# 配置生成文件
+NETWORKID_JSON="/etc/rg_config/networkid.json"
+# log配置生成文件
+NETWORKID_LOG="/tmp/rg_config/networkId_config.log"
+
+# 触发lnid通告脚本(网桥设备使用)
+EST_NETWORK_NOTIFY="/usr/bin/network_notify.lua"
+mqlink_process="/usr/sbin/mqlink.elf"
+
+networkid_default='{
+    "networkId":"0",
+    "networkName":"default",
+    "groupId":"0",
+    "groupName":"default",
+    "parentGroupId":""
+}'
+
+# 文件不存在时，生成一份默认配置
+[ ! -f "$NETWORKID_JSON" ] && echo "$networkid_default" | jq . > "$NETWORKID_JSON"
+
+networkId_set() {
+    local param=$1
+    local networkId
+    local networkName
+    local groupId
+    local groupName
+    local parentGroupId
+    local default_id
+    local default_name
+    local default_gid
+    local default_gnm
+    local default_pgi
+    local lnid_change_flag=0
+    local lcl_param=""
+
+    flock -x 90
+
+    echo "********************$(date "+%Y-%m-%d %H:%M:%S")**********************" >> "$NETWORKID_LOG"
+    echo "[set]param: $param" >> "$NETWORKID_LOG"
+
+    json_load "$param"
+    [ $? -ne 0 ] && {
+        echo "json is error" >> "$NETWORKID_LOG"
+        flock -u 90
+        return 1
+    }
+
+    json_get_var networkId "networkId"
+    json_get_var networkName "networkName"
+    json_get_var groupId "groupId"
+    json_get_var groupName "groupName"
+    json_get_var parentGroupId "parentGroupId"
+
+    if [ -z "$networkId" ] || [ -z "$networkName" ] || [ -z "$groupId" ] || [ -z "$groupName" ]; then
+        echo "networkId is error" >> "$NETWORKID_LOG"
+        flock -u 90
+        return 1
+    fi
+
+    if [ ${#networkId} -gt 32 ]; then
+        echo "netowrkId more then 32 bytes" >> "$NETWORKID_LOG"
+        flock -u 90
+        return 1
+    fi
+
+    if [ ${#networkName} -gt 64 ]; then
+        echo "networkName more then 64 bytes" >> "$NETWORKID_LOG"
+        return 1
+    fi
+
+    if [ ${#groupId} -gt 16 ]; then
+        echo "groupId more then 16 bytes" >> "$NETWORKID_LOG"
+        flock -u 90
+        return 1
+    fi
+
+    if [ ${#groupName} -gt 64 ]; then
+        echo "groupName more then 64 bytes" >> "$NETWORKID_LOG"
+        flock -u 90
+        return 1
+    fi
+
+    if [ ${#parentGroupId} -gt 16 ]; then
+        echo "parentGroupId more then 16 bytes" >> "$NETWORKID_LOG"
+        flock -u 90
+        return 1
+    fi
+
+    if [ ! -f "/etc/rg_config/networkid.json" ]; then
+        echo "file is no exist!" > "$NETWORKID_LOG"
+        echo "$networkid_default" > "$NETWORKID_JSON"
+    fi
+
+    lcl_param=$(cat /etc/rg_config/networkid.json | jq . 2>/dev/null)
+    default_id=$(echo "$lcl_param" | jq .'networkId' | tr -d '"')
+    echo "default_id[$default_id]" >> "$NETWORKID_LOG"
+    if [ -z "$default_id" ]; then
+        echo "zero networkid!" >> "$NETWORKID_LOG"
+        echo "$networkid_default" > "$NETWORKID_JSON"
+    fi
+    
+    lcl_param=$(cat /etc/rg_config/networkid.json | jq . 2>/dev/null)
+    default_id=$(echo "$lcl_param" | jq .'networkId' | tr -d '"')
+    default_name=$(echo "$lcl_param" | jq .'networkName' | tr -d '"')
+    default_gid=$(echo "$lcl_param" | jq .'groupId' | tr -d '"')
+    default_gnm=$(echo "$lcl_param" | jq .'groupName' | tr -d '"')
+    default_pgi=$(echo "$lcl_param" | jq .'parentGroupId' | tr -d '"')
+    echo "default_id[$default_id] default_name[$default_name] default_gid[$default_gid] default_gnm[$default_gnm] default_pgi[$default_pgi]" >> "$NETWORKID_LOG"
+
+    if [ "$default_id" != "0" ]; then
+        echo "default_id[$default_id] isn's zero! not set networkId!" >> "$NETWORKID_LOG"
+        flock -u 90
+        return 1
+    fi
+    
+    if [ "$networkId" != "$default_id" ]; then
+        echo "write networkId" >> "$NETWORKID_LOG"
+        json_init
+        json_add_string 'networkId' "$networkId"
+        json_add_string 'networkName' "$networkName"
+        json_add_string 'groupId' "$groupId"
+        json_add_string 'groupName' "$groupName"
+        json_add_string 'parentGroupId' "$parentGroupId"
+        est_ret=$(json_dump)
+        echo "$est_ret" > "$NETWORKID_JSON"
+        echo "est_ret:$est_ret" >> "$NETWORKID_LOG"
+        # 判断当前使用cwmp|mqlink，并调用相应的通告接口
+        if [ -f "$EST_NETWORK_NOTIFY" ] && [ -f "$mqlink_process" ]; then
+            log "$EST_NETWORK_NOTIFY and $mqlink_process is exist, ready to run mqlink notify"
+            /usr/bin/network_notify.lua notify
+        else
+            dev_sta set -m cwmp_notify "{\"networkId\":\"$networkId\"}" >/dev/null
+            echo "cwmp notify ok." >> "$NETWORKID_LOG"
+        fi
+    fi
+
+    echo "[set][networkId] end." >> "$NETWORKID_LOG"
+    flock -u 90
+
+    return 0
+}
+
+networkId_get() {
+    cat "$NETWORKID_JSON" 2>/dev/null
+}
+
+if [ -e "$NETWORKID_LOG" ]; then
+        log_line=$(cat "$NETWORKID_LOG" | wc -l)
+        [ $log_line -gt 500 ] && { rm -rf "$NETWORKID_LOG"; }
+fi

@@ -1,0 +1,64 @@
+#!/bin/sh
+
+. /usr/share/libubox/jshn.sh
+
+RG_CONFIG_TMP_DIR="/tmp/rg_config/"
+# wdsmode切换模块
+WDSMODE_SWITCH_CONFIG_LOG="${RG_CONFIG_TMP_DIR}wdsmode_switch_config.log"
+
+wdsmode_switch_set()
+{
+    local param=$1
+
+    #初始化
+    json_init
+
+    echo "$param" | jq . >/dev/null
+   if [ "$?" != "0" ]; then
+        json_add_string 'code' '-2'
+        json_dump | sed 's/ //g'
+        echo "no json-format." >> ${WDSMODE_SWITCH_CONFIG_LOG}
+        return
+    fi
+    echo "param:$param" >> ${WDSMODE_SWITCH_CONFIG_LOG}
+
+    dev_mode=$(uci -q get wireless.@wifi-iface[0].mode)
+    conf_mode=$(echo $param | jq -r '.wdsmode')
+    [ "$conf_mode" == "ap" ] || [ "$conf_mode" == "sta" ] || return
+    if [ "$dev_mode" == "$conf_mode" ]; then
+        json_add_string 'code' '-1'
+        json_dump | sed 's/ //g'
+        echo "mode[$conf_mode] no change." >> ${WDSMODE_SWITCH_CONFIG_LOG}
+        return
+    else
+        if [ "$dev_mode" == "ap" ]; then
+            echo "AP-mode del macfilter&maclist." >> ${WDSMODE_SWITCH_CONFIG_LOG}
+            uci -q del wireless.@wifi-iface[0].macfilter
+            uci -q del wireless.@wifi-iface[0].maclist
+        elif [ "$dev_mode" == "sta" ]; then
+            echo "CPE-mode del bssid." >> ${WDSMODE_SWITCH_CONFIG_LOG}
+            # bssid删除需要重启设备
+            uci -q del wireless.@wifi-iface[0].bssid
+        fi
+        if [ -z "$(uci -q get wireless.wifi1.modeswi_flag)" ]; then
+            # 如果已经设置过就不再配置了
+            uci set wireless.wifi1.modeswi_flag=1
+        fi
+        uci set wireless.@wifi-iface[0].mode=$conf_mode
+        uci commit wireless
+        wifi >/dev/null
+        json_add_string 'code' '0'
+        json_dump | sed 's/ //g'
+        echo "[$dev_mode] Switch to [$conf_mode] OK." >> ${WDSMODE_SWITCH_CONFIG_LOG}
+    fi
+}
+
+# LOG文件大小限制500行
+if [ -e ${WDSMODE_SWITCH_CONFIG_LOG} ]; then
+    log_line=$(cat ${WDSMODE_SWITCH_CONFIG_LOG} | wc -l)
+    [ ${log_line} -gt 500 ] && { rm -rf ${WDSMODE_SWITCH_CONFIG_LOG}; }
+fi
+
+echo -e "\n" >> ${WDSMODE_SWITCH_CONFIG_LOG}
+echo "************$(date "+%Y-%m-%d %H:%M:%S")************" >> ${WDSMODE_SWITCH_CONFIG_LOG} 
+echo "$0 $*" >> ${WDSMODE_SWITCH_CONFIG_LOG}

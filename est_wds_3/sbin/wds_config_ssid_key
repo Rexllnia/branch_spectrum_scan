@@ -1,0 +1,81 @@
+#!/bin/sh
+. /usr/share/libubox/jshn.sh
+RG_CONFIG_TMP_DIR="/tmp/rg_config/"
+EST_MODEL_LOG="${RG_CONFIG_TMP_DIR}wds_config_ssid_key.log"
+
+
+
+#debug
+debug() {
+    local time=$(date "+%H:%M:%S")
+    echo -e "[$time][$$]$1"  >> ${EST_MODEL_LOG}
+}
+
+
+set_key(){
+	local key=$1
+	local AES_ENC_INPUT_FILE="/tmp/local_pw"
+	local AES_ENC_OUTPUT_FILE="/tmp/enc_local_pw"
+	echo -n "$key" > "$AES_ENC_INPUT_FILE"
+	local pw_enc_cmd="rg_crypto enc -t C -in $AES_ENC_INPUT_FILE -out $AES_ENC_OUTPUT_FILE"
+	`eval $pw_enc_cmd`
+	debug "$pw_enc_cmd"
+	
+	local pw_enc=$(cat $AES_ENC_OUTPUT_FILE)
+	
+	local set_pw_cmd="dev_sta set --module 'wds_password' '{\"pw\":\"$pw_enc\"}'"
+	`eval $set_pw_cmd`
+	debug "$set_pw_cmd"
+	
+	rm -f $AES_ENC_INPUT_FILE
+	rm -f $AES_ENC_OUTPUT_FILE
+}
+
+set_ssid(){
+	local ssid=$1
+	est_wireless_get=$(dev_config get -m est_wireless)
+	#est_dbg "est_wireless_get:$est_wireless_get"
+	json_load "$est_wireless_get"
+	[ $? -ne 0 ] && est_dbg "json is error" && return 1
+	
+	 # 只保留radioList和ssidList
+	filtered=$(echo "$est_wireless_get" | jq '{radioList: .radioList, ssidList: .ssidList}')
+
+	# 修改ssidName的值 换行符和空格
+	new_json=$(echo "$filtered" | jq --arg ssid "$ssid" '.ssidList[0].ssidName=$ssid' | tr -d '\n' | tr -d ' ') 
+
+	new_json="'$new_json'"
+	echo "new_json=$new_json"
+
+	local set_ssid_cmd="dev_config set --module \"est_wireless\" ${new_json}"
+
+	`eval $set_ssid_cmd`
+	debug "set_ssid_cmd:$set_ssid_cmd"
+}
+
+
+input_param1=$1
+input_param2=$2
+if [ -z "$input_param1" ];then
+	debug "(err) The input_param1 passed in by rg_wds_gpio is null"
+	return
+fi
+
+if [ -z "$input_param2" ];then
+	debug "(err) The input_param2 passed in by rg_wds_gpio is null"
+	return
+fi
+
+if [ "$input_param1" = "ssid" ];then
+	set_ssid "$input_param2"
+elif [ "$input_param1" = "key" ];then
+	set_key "$input_param2"
+else
+	debug "(err) The input_param1 can only be [ssid] or [key]"
+fi
+
+#log鏂囦欢澶у皬闄?0k
+if [ -e ${EST_MODEL_LOG} ]; then
+    local est_model_log_byte=$(ls -l ${EST_MODEL_LOG} | awk '{print $5}')
+    [ ${est_model_log_byte} -gt 20000 ] && { mv -f ${EST_MODEL_LOG} ${EST_MODEL_LOG}.old; }
+fi

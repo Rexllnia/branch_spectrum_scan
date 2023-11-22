@@ -1,0 +1,420 @@
+#!/bin/sh
+
+. /usr/share/libubox/jshn.sh
+# 易网络统一框架接口，设置/获取networkId
+
+# 配置生成文件
+NETWORKID_JSON="/etc/rg_config/networkid.json"
+# log配置生成文件
+NETWORKID_MERGE_LOG="/tmp/rg_config/networkId_merge_config.log"
+# 触发lnid通告脚本(网桥设备使用)
+EST_NETWORK_NOTIFY="/usr/bin/network_notify.lua"
+mqlink_process="/usr/sbin/mqlink.elf"
+
+networkid_default='{
+    "networkId":"0",
+    "networkName":"default",
+    "groupId":"0",
+    "groupName":"default",
+    "parentGroupId":""
+}'
+
+set_lnid()
+{
+    local fromNetworkId=$1
+    local toNetworkId=$2
+    local default_id=""
+    local default_name=""
+    local default_gid=""
+    local default_gnm=""
+    local default_pgi=""
+    local est_ret=""
+
+    if [ ! -f "/etc/rg_config/networkid.json" ]; then
+        echo "networid.json is not exist!" >> "$NETWORKID_MERGE_LOG"
+        echo "$networkid_default" > "$NETWORKID_JSON"
+    fi
+
+    default_id=$(cat "$NETWORKID_JSON" | jq -r '.networkId'|sed 's/\"//g')
+    echo "default_id:$default_id" >> "$NETWORKID_MERGE_LOG"
+    if [ "$fromNetworkId" != "$default_id" ]; then
+        echo "not to set networkId[$fromNetworkId][$default_id]." >> "$NETWORKID_MERGE_LOG"
+        return 1
+    fi
+
+    if [ "$toNetworkId" == "$default_id" ]; then
+        echo "networkId no change." >> "$NETWORKID_MERGE_LOG"
+        return 0
+    fi
+
+    lcl_param=$(cat /etc/rg_config/networkid.json | jq . 2>/dev/null)
+    echo "lcl_param:$lcl_param" >> "$NETWORKID_MERGE_LOG"
+    default_name=$(echo "$lcl_param" | jq .'networkName' | tr -d '"')
+    default_gid=$(echo "$lcl_param" | jq .'groupId' | tr -d '"')
+    default_gnm=$(echo "$lcl_param" | jq .'groupName' | tr -d '"')
+    default_pgi=$(echo "$lcl_param" | jq .'parentGroupId' | tr -d '"')
+    echo "default_id[$default_id] default_name[$default_name] default_gid[$default_gid] default_gnm[$default_gnm] default_pgi[$default_pgi]" >> "$NETWORKID_MERGE_LOG"
+	echo "{\"networkId\":\"$toNetworkId\",\"networkName\":\"$default_name\",\"groupId\":\"$default_gid\",\"groupName\":\"$default_gnm\",\"parentGroupId\":\"$default_pgi\"}" > "$NETWORKID_JSON"
+    if [ -f "$EST_NETWORK_NOTIFY" ] && [ -f "$mqlink_process" ]; then
+            echo "$EST_NETWORK_NOTIFY and $mqlink_process is exist, ready to run mqlink notify" >> "$NETWORKID_MERGE_LOG"
+            /usr/bin/network_notify.lua notify
+    else
+            dev_sta set -m cwmp_notify "{\"networkId\":\"$networkId\"}" >/dev/null
+            echo "cwmp notify ok." >> "$NETWORKID_LOG"
+    fi
+    echo "[set_lnid]ok." >> "$NETWORKID_MERGE_LOG"
+    return 0
+}
+
+ssid_config_compare()
+{
+    local ssidName=$1
+    local encryption=$2
+    local key=$3
+    local hidden=$4
+
+    if [ "$ssidName" != "$(uci -q get wireless.@wifi-iface[2].ssid)" ]; then
+        echo "[ssid_config_compare]ssidName change." >> "$NETWORKID_MERGE_LOG"
+        echo "false"
+        return
+    fi
+
+    if [ "$encryption" != "$(uci -q get wireless.@wifi-iface[2].encryption)" ]; then
+        echo "[ssid_config_compare]encryption change." >> "$NETWORKID_MERGE_LOG"
+        echo "false"
+        return
+    fi
+
+    if [ "$key" != "$(uci -q get wireless.@wifi-iface[2].key)" ]; then
+        echo "[ssid_config_compare]key change." >> "$NETWORKID_MERGE_LOG"
+        echo "false"
+        return
+    fi
+
+    if [ "$hidden" != "$(uci -q get wireless.@wifi-iface[2].hidden)" ]; then
+        echo "[ssid_config_compare]hidden change." >> "$NETWORKID_MERGE_LOG"
+        echo "false"
+        return
+    fi
+
+    echo "true"
+    return
+}
+
+set_allnet_mngssid()
+{
+    local status=$1
+    local ssidName=$2
+    local encryption=$3
+    local key=$4
+    local hidden=$5
+    local mng_disabled=""
+    local mng_config_change_flag=0
+    local ret_str
+
+    echo "status[$status] ssidName[$ssidName] encryption[$encryption] key[$key] hidden[$hidden]." >> "$NETWORKID_MERGE_LOG"
+
+    # 判断本机管理ssid是否开启
+    mng_disabled=$(uci -q get wireless.@wifi-iface[2].disabled)
+    if [ "$status" == "true" ]; then
+        # 判断本机是否是开启，如果开启，再匹配ssidName、encryption、key、hidden字段是否相同
+        if [ $mng_disabled -eq 0 ]; then
+            echo "true." >> "$NETWORKID_MERGE_LOG"
+            ret_str=$(ssid_config_compare "$ssidName" "$encryption" "$key" "$hidden")
+            [ "$ret_str" == "false" ] && {
+                mng_config_change_flag=1
+            }
+        else
+            echo "true disabled." >> "$NETWORKID_MERGE_LOG"
+            mng_config_change_flag=1
+        fi
+    elif [ "$status" == "false" ] || [ -z "$status" ]; then
+        # 判断本机是否是开启，如果开启，再匹配ssidName、encryption、key、hidden字段是否相同
+        if [ $mng_disabled -eq 0 ]; then
+            echo "false." >> "$NETWORKID_MERGE_LOG"
+            mng_config_change_flag=1
+        fi
+    fi
+    
+    if [ $mng_config_change_flag -eq 1 ]; then
+        dev_sta set -m rmt_mngssid "{\"mngssidStatus\":\"$status\"}"
+        if [ $hidden -eq 1 ]; then
+            hidden="true"
+        else
+            hidden="false"
+        fi
+        case "$encryption" in
+        "none") encryption="open";;
+        "psk") encryption="wpa-psk";;
+        "psk2") encryption="wpa2-psk";;
+        "psk-mixed") encryption="wpa_wpa2-psk";;
+        *)encryption="open";;
+        esac
+        
+        ac_config set -m wireless "{\"delay\":\"5\",\"radioList\":[{\"hwmode\":\"11ng\",\"type\":\"2.4G\",\"country\":\"CN\",\"enable\":\"true\",\"radioIndex\":\"1\",\"maxSta\":\"64\",\"bandWidth\":\"auto\"},{\"hwmode\":\"11ac\",\"type\":\"5G\",\"country\":\"CN\",\"enable\":\"true\",\"radioIndex\":\"2\",\"maxSta\":\"64\",\"bandWidth\":\"auto\"}],\"apIsolate\":\"false\",\"version\":\"1.0.0\",\"ssidList\":[{\"fowardType\":\"bridge\",\"relatedRadio\":\"1,2\",\"enable\":\"$status\",\"wlanId\":\"1\",\"password\":\"$key\",\"encryptionMode\":\"$encryption\",\"ishidden\":\"$hidden\",\"ssidName\":\"$ssidName\",\"mode\":\"ap\",\"vlanId\":\"1\",\"ssidEncode\":\"utf-8\"}]}"
+        echo "mngssid config has change." >> "$NETWORKID_MERGE_LOG"
+        return 0
+    fi
+    
+    echo "mngssid config no change." >> "$NETWORKID_MERGE_LOG"
+    return 0
+}
+
+set_passwd()
+{
+    local password=$1
+    local type=$2
+    local toPasswd=$3
+    local local_passwd
+
+
+    # passwd check
+    if [ -f "/etc/rg_config/admin" ]; then
+        local_passwd=$(echo $(cat /etc/rg_config/admin) | openssl enc -aes-256-cbc -d -a -k "RjYkhwzx\$2018!")
+    else
+        local_passwd="admin"
+    fi
+    if [ "$type" == "enc" ]; then
+        password=$(echo $password | openssl enc -aes-256-cbc -d -a -k "RjYkhwzx\$2018!")
+    fi
+    # echo "password[$password] local_passwd[$local_passwd] toPasswd[$toPasswd]" >> "$NETWORKID_MERGE_LOG"
+    if [ "$local_passwd" != "$password" ]; then
+        echo "password check fail." >> "$NETWORKID_MERGE_LOG"
+        return 1
+    fi
+
+    # passwd sync
+    echo "password check suc." >> "$NETWORKID_MERGE_LOG"
+    # passwd set
+    if [ -n "$toPasswd" ]; then
+        `ac_config set -m eweb_password "{\"password\":\"$toPasswd\",\"type\":\"enc\"}"`
+    else
+        `ac_config set -m eweb_password "{\"password\":\"admin\",\"type\":\"noenc\"}"`
+    fi
+
+    echo "passwd set suc." >> "$NETWORKID_MERGE_LOG"
+
+    return 0
+}
+
+est_allnet_info_sync()
+{
+    local fromNetworkId=$1
+    local toNetworkId=$2
+    local password=$3
+    local type=$4
+    local toPasswd=$5
+    local mngStatus=$6
+    local ssidName=$7
+    local encryption=$8
+    local key=$9
+    local hidden=$10
+    local ret=""
+    local ntvSn=""
+
+    ntvSn=$(cat /proc/rg_sys/serial_num)
+    json_add_string 'sn' "$ntvSn"
+    if [ -z "$fromNetworkId" ]; then
+        echo "fromNetworkId is NULL!" >> "$NETWORKID_MERGE_LOG"
+        json_add_string 'code' "1"
+        json_add_string 'result' "fail"
+        json_add_string 'reason' "参数异常"
+        return
+    fi
+
+    if [ -z "$toNetworkId" ]; then
+        echo "toNetworkId is NULL!" >> "$NETWORKID_MERGE_LOG"
+        json_add_string 'code' "1"
+        json_add_string 'result' "fail"
+        json_add_string 'reason' "参数异常"
+        return
+    fi
+
+    echo "ssidName[$ssidName] encryption[$encryption] key[$key] hidden[$hidden] mngStatus[$mngStatus] fromNetworkId[$fromNetworkId] toNetworkId[$toNetworkId] type[$type]." >> "$NETWORKID_MERGE_LOG"
+    #计算返回值
+    set_passwd "$password" "$type" "$toPasswd"
+    if [ $? -eq 1 ]; then
+        echo "set_passwd error!" >> "$NETWORKID_MERGE_LOG"
+        json_add_string 'code' "2"
+        json_add_string 'result' "fail"
+        json_add_string 'reason' "密码校验失败"
+        return
+    fi
+
+    set_lnid "$fromNetworkId" "$toNetworkId"
+    if [ $? -eq 1 ]; then
+        echo "set_lnid error!" >> "$NETWORKID_MERGE_LOG"
+    fi
+
+    set_allnet_mngssid "$mngStatus" "$ssidName" "$encryption" "$key" "$hidden"
+
+    json_add_string 'code' "0"
+    json_add_string 'result' "success"
+    json_add_string 'reason' "合并成功"
+}
+
+get_native_hidden()
+{   
+    echo "$(uci -q get wireless.@wifi-iface[2].hidden)"
+}
+
+get_native_key()
+{   
+    echo "$(uci -q get wireless.@wifi-iface[2].key)"
+}
+
+get_native_encryption()
+{
+    echo "$(uci -q get wireless.@wifi-iface[2].encryption)"
+}
+
+get_native_ssidName()
+{
+    echo "$(uci -q get wireless.@wifi-iface[2].ssid)"
+}
+
+get_native_mngStatus()
+{
+    local status
+    
+    status=$(uci -q get wireless.@wifi-iface[2].disabled)
+    if [ -z "$status"] || [ $status -eq 1 ]; then
+        echo "false"
+    elif [ $status -eq 0 ]; then
+        echo "true"
+    fi
+}
+
+networkId_merge_set() {
+    local param=$1
+    local dev_passwd=""
+    local est_ret=""
+    local i
+    local ntvSsidStatus
+    local ntvSsidName
+    local ntvEncryption
+    local ntvKey
+    local ntvHidden
+    local est_merge_err_flag=0
+    local error_code=""
+    local est_reason=""
+    local error_ntvSn=""
+    local ntvSn=""
+
+    flock -x 90
+
+    echo "********************$(date "+%Y-%m-%d %H:%M:%S")**********************" >> "$NETWORKID_MERGE_LOG"
+    echo "[set]param: $param" >> "$NETWORKID_MERGE_LOG"
+
+    json_load "$param"
+    [ $? -ne 0 ] && {
+        echo "json is error" >> "$NETWORKID_MERGE_LOG"
+        flock -u 90
+        return 1
+    }
+
+    json_get_var fromNetworkId "fromNetworkId"
+    json_get_var toNetworkId "toNetworkId"
+    json_get_var password "password"
+    json_get_var type "type"
+    json_get_type SnStatus "fromSn"
+    echo "SnStatus[$SnStatus]" >> "$NETWORKID_MERGE_LOG"
+    json_get_var toPasswd "toPasswd"
+    json_get_var mngStatus "mngStatus"
+    json_get_var ssidName "ssidName"
+    json_get_var encryption "encryption"
+    json_get_var key "key"
+    json_get_var hidden "hidden"
+
+    if [ -z "$fromNetworkId" ]; then
+        echo "fromNetworkId is NULL!" >> "$NETWORKID_MERGE_LOG"
+        flock -u 90
+        return 1
+    fi
+    
+    if [ -z "$toNetworkId" ]; then
+        echo "toNetworkId is NULL!" >> "$NETWORKID_MERGE_LOG"
+        flock -u 90
+        return 1
+    fi
+    
+    if [ -z "$password" ]; then
+        echo "password is NULL!" >> "$NETWORKID_MERGE_LOG"
+        flock -u 90
+        return 1
+    fi
+    
+    if [ -z "$type" ]; then
+        echo "type is NULL!" >> "$NETWORKID_MERGE_LOG"
+        flock -u 90
+        return 1
+    fi
+
+    echo "fromNetworkId[$fromNetworkId] toNetworkId[$toNetworkId] type[$type] mngStatus[$mngStatus] ssidName[$ssidName] encryption[$encryption] key[$key] hidden[$hidden]." >> "$NETWORKID_MERGE_LOG"
+    if [ "$SnStatus" == "array" ]; then
+        local i=1
+        ntvSsidStatus=$(get_native_mngStatus)
+        if [ "$ntvSsidStatus" == "true" ]; then #远程分发处理
+            ntvSsidName=$(get_native_ssidName)
+            ntvEncryption=$(get_native_encryption)
+            ntvKey=$(get_native_key)
+            ntvHidden=$(get_native_hidden)
+        fi
+        echo "ntvSsidStatus[$ntvSsidStatus] ntvSsidName[$ntvSsidName] ntvEncryption[$ntvEncryption] ntvKey[$ntvKey] ntvHidden[$ntvHidden]" >> "$NETWORKID_MERGE_LOG"
+        json_select fromSn
+        dev_passwd=$(cat /etc/rg_config/admin 2>/dev/null)
+        while true
+        do
+            json_get_var dest_sn $i
+            [ -z "$dest_sn" ] && break
+            echo "dest_sn[$dest_sn]" >> "$NETWORKID_MERGE_LOG"
+            # 分发到每一台设备
+            #json_add_object "$i"
+            est_ret=$(dev_sta set -m networkId_merge "{\"sn\":[\"$dest_sn\"],\"fromNetworkId\":\"$fromNetworkId\",\"toNetworkId\":\"$toNetworkId\",\"password\":\"$password\",\"type\":\"$type\",\"toPasswd\":\"$dev_passwd\",\"mngStatus\":\"$ntvSsidStatus\",\"ssidName\":\"$ntvSsidName\",\"encryption\":\"$ntvEncryption\",\"key\":\"$ntvKey\",\"hidden\":\"$ntvHidden\"}")
+            # echo "est_ret:$est_ret" >> "$NETWORKID_MERGE_LOG"
+            if [ "$est_ret" == "error" ]; then
+                echo "[tipc-error]dest_sn:$dest_sn est_ret:$est_ret" >> "$NETWORKID_MERGE_LOG"
+                est_merge_err_flag=1
+                error_code="1"
+                error_ntvSn="$dest_sn"
+                let i=$i+1
+                continue
+            fi
+            code=$(echo $est_ret | jq '.code' | tr -d '"')
+            echo "code:$code" >> "$NETWORKID_MERGE_LOG"
+            if [ $code -ne 0 ]; then
+                est_merge_err_flag=1
+                error_code=$code
+                error_ntvSn=$dest_sn
+                echo "error_code:$error_code error_ntvSn:error_ntvSn" >> "$NETWORKID_MERGE_LOG"
+            fi
+            let i=$i+1
+        done
+        if [ $est_merge_err_flag -eq 1 ]; then
+            case "$error_code" in
+            "1") est_reason="配置异常，请重试";;
+            "2") est_reason="密码校验失败";;
+            "3") est_reason="组网配置失败";;
+            "4") est_reason="全网ssid配置失败";;
+            esac
+            echo "est_reason:$est_reason" >> "$NETWORKID_MERGE_LOG"
+            echo "{\"sn\":\"$error_ntvSn\",\"code\":\"$error_code\",\"result\":\"fail\",\"reason\":\"$est_reason\"}"
+        else
+            echo '{"sn":"","code":"0","result":"success","reason":"合并成功"}'
+        fi
+    elif [ -z "$SnStatus" ]; then #本机生效处理
+        echo "it's me!" >> "$NETWORKID_MERGE_LOG"
+        json_init
+        est_allnet_info_sync "$fromNetworkId" "$toNetworkId" "$password" "$type" "$toPasswd" "$mngStatus" "$ssidName" "$encryption" "$key" "$hidden"
+        json_dump
+    fi
+
+    #echo '{"code":"0","result":"success","reason":"合并结束"}'
+    flock -u 90
+    return 0
+}
+
+if [ -e "$NETWORKID_MERGE_LOG" ]; then
+        log_line=$(cat "$NETWORKID_MERGE_LOG" | wc -l)
+        [ $log_line -gt 500 ] && { mv -f ${NETWORKID_MERGE_LOG} ${NETWORKID_MERGE_LOG}.old; }
+fi

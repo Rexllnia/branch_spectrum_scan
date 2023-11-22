@@ -1,0 +1,1 @@
+obj-m := rg_wds_beacon.o

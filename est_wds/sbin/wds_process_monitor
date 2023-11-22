@@ -1,0 +1,22 @@
+#!/bin/sh
+
+sleep 60
+flag=0
+while true
+do
+    status=`ps | grep  rg_wds_gpio | grep -v -c  grep`
+    #echo "$status  $status flag $flag"
+    if [ "$status" != "1" ];then
+        flag=`expr $flag + 1`
+    else
+        flag=0
+    fi
+    #1分钟左右进程异常，杀死所有进程，重新启动
+    if [ "$flag" == "10" ] ;then
+        kill -9 `ps | grep rg_wds_gpio | grep -v grep | awk '{print $1}'`
+        flag=0
+        /sbin/rg_wds_gpio &
+    fi
+
+    sleep 5
+done

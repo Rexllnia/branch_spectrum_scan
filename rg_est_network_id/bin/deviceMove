@@ -1,0 +1,132 @@
+#!/bin/sh
+
+. /usr/share/libubox/jshn.sh
+
+# networkId配置文件
+NETWORKID_JSON="/etc/rg_config/networkid.json"
+# log配置生成文件
+DEVICE_MOVE_LOG="/tmp/rg_config/deviceMove_config.log"
+MODULE_NAME="deviceMove"
+
+networkid_default='{
+    "networkId":"0",
+    "networkName":"default",
+    "groupId":"0",
+    "groupName":"default",
+    "parentGroupId":""
+}'
+
+networkId_parentGroupId_set()
+{
+    local networkId=$1
+    local parentGroupId=$2
+    local lnid_change_flag=0
+
+    if [ "$networkId" != "$prevNetworkId" ]; then
+        echo "write networkId" >> ${DEVICE_MOVE_LOG}
+        json_init
+        json_add_string 'networkId' "$networkId"
+        json_add_string 'networkName' "$prevnetworkName"
+        json_add_string 'groupId' "$prevgroupId"
+        json_add_string 'groupName' "$prevgroupName"
+        json_add_string 'parentGroupId' "$parentGroupId"
+        est_ret=$(json_dump)
+		echo "$est_ret" >> "$DEVICE_MOVE_LOG"
+		echo "$est_ret" > "$NETWORKID_JSON"
+
+        # 适配mqlink
+        if [ -f "usr/bin/cwmp_notify" ]; then
+            # 本接口由cwmp_notify提供
+            dev_sta set -m cwmp_notify "{\"networkId\":\"$networkId\"}" >/dev/null
+            echo "cwmp notify ok." >> "$NETWORKID_LOG"
+        else
+            # 本接口由mqlink提供
+            dev_sta set -m mqlink_stantf "{\"user\":\"networkId\",\"bizid\":\"sta_networkId_0\",\"name\":\"networkId\",\"ts\":0,\"ack\":\"true\",\"val\":{\"lnid\":\"$networkId\",\"lgid\":\"0\",\"pgid\":\"\"}}" >/dev/null
+            echo "mqlink notify ok." >> "$NETWORKID_LOG"
+        fi
+    fi
+
+}
+
+deviceMove_set() {
+    local param="$1"
+    local networkId=
+    local parentGroupId=
+
+    flock -x 90
+    echo "********************$(date "+%Y-%m-%d %H:%M:%S")**********************" >> ${DEVICE_MOVE_LOG}
+    echo "[set]param: $param" >> ${DEVICE_MOVE_LOG}
+
+    json_load "$param"
+    [ $? -ne 0 ] && { 
+        echo '{"result":"fail", "reason":"param is not json string"}' >> ${DEVICE_MOVE_LOG}
+        flock -u 90
+        return 1
+    }
+
+    json_get_var networkId "networkId"
+    [ -z "$networkId" ] && {
+        echo '{"result":"fail", "reason":"Not read networkId inform in json string"}' >> ${DEVICE_MOVE_LOG}
+        flock -u 90
+        return 1
+    }
+
+    [ ${#networkId} -gt 32 ] && {
+        echo '{"result":"fail", "reason":"netowrkId length is more then 32 byte"}' >> ${DEVICE_MOVE_LOG}
+        flock -u 90
+        return 1
+    }
+
+    json_get_var parentGroupId "parentGroupId"
+    [ ${#parentGroupId} -gt 16 ] && {
+        echo '{"result":"fail", "reason":"parentGroupId length is more then 16 byte"}' >> ${DEVICE_MOVE_LOG}
+        flock -u 90
+        return 1
+    }
+
+	if [ ! -f "$NETWORKID_JSON" ]; then
+		echo "$NETWORKID_JSON isn't exist, wrt default config!"  >> ${DEVICE_MOVE_LOG}
+		echo "$networkid_default" >> "$NETWORKID_JSON"
+	fi
+    # 获取当前网络id和当前分组
+    prevNetworkId=$(cat "$NETWORKID_JSON" | jq -r '.networkId'|sed 's/\"//g')
+    prevnetworkName=$(cat "$NETWORKID_JSON" | jq -r '.networkName'|sed 's/\"//g')
+	prevgroupId=$(cat "$NETWORKID_JSON" | jq -r '.groupId'|sed 's/\"//g')
+	prevgroupName=$(cat "$NETWORKID_JSON" | jq -r '.groupName'|sed 's/\"//g')
+	prevparentGroupId=$(cat "$NETWORKID_JSON" | jq -r '.parentGroupId'|sed 's/\"//g')
+
+    echo "networkId[$networkId] prevNetworkId[$prevNetworkId] prevnetworkName[$prevnetworkName] prevgroupId[$prevgroupId] prevgroupName[$prevgroupName] prevparentGroupId[$prevparentGroupId]."  >> ${DEVICE_MOVE_LOG}
+    # networkId配置为0时，将networkId配置文件、web管理密码清除
+    if [ "$networkId" == "0" ]; then
+        if [ "$networkId" != "$prevNetworkId" ]; then
+            echo "clear device configuration."  >> ${DEVICE_MOVE_LOG}
+            # 删除networkid配置文件
+            rm -rf /etc/rg_config/networkid.json
+            # 清除web的管理密码配置
+            ac_config clear -m eweb_password
+            # 适配mqlink
+            if [ -f "usr/bin/cwmp_notify" ]; then
+                # 本接口由cwmp_notify提供
+                dev_sta set -m cwmp_notify "{\"networkId\":\"$networkId\"}" >/dev/null
+                echo "cwmp notify ok." >> "$NETWORKID_LOG"
+            else
+                # 本接口由mqlink提供
+                dev_sta set -m mqlink_stantf "{\"user\":\"networkId\",\"bizid\":\"sta_networkId_0\",\"name\":\"networkId\",\"ts\":0,\"ack\":\"true\",\"val\":{\"lnid\":\"$networkId\",\"lgid\":\"0\",\"pgid\":\"\"}}" >/dev/null
+                echo "mqlink notify ok." >> "$NETWORKID_LOG"
+            fi
+            echo "cwmp notify ok." >> ${DEVICE_MOVE_LOG}
+        fi
+    else
+        networkId_parentGroupId_set "$networkId" "$parentGroupId"
+    fi
+
+    echo '{"result":"success"}'
+    echo "set [$MODULE_NAME] suc."  >> ${DEVICE_MOVE_LOG}
+    flock -u 90
+    return 0
+}
+
+if [ -e "$DEVICE_MOVE_LOG" ]; then
+        log_line=$(cat "$DEVICE_MOVE_LOG" | wc -l)
+        [ $log_line -gt 500 ] && { rm -rf "$DEVICE_MOVE_LOG"; }
+fi

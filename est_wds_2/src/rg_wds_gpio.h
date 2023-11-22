@@ -1,0 +1,10 @@
+#define WDS_TYPE                    "p2p"
+
+#define GPIO_CONF_FILE              "/tmp/rg_device/rg_wds_gpio.json"
+#define WDS_TPYT_ID                 "wds_ypye"
+#define GPIO_ID                     "GPIO"
+#define GPIO_FUNCTION_MODE          "mode"
+#define GPIO_FUNCTION_LOCK          "lock"
+#define GPIO_PIN                    "pin"
+#define GPIO_LOW                    "low_0"
+#define GPIO_HIGH                   "high_1"

@@ -1,0 +1,25 @@
+#!/bin/sh
+status=$1
+second=$2
+if [ -z "$status" ];then
+	echo "Too few parameters. Format: gdbg [open|close]"
+	return
+elif [ -n "$second" ];then
+	echo "Too many parameters. Format: gdbg [open|close] "
+	return
+fi
+console=`tty`
+if [ "$status" == "close" ];then
+	ubus call wds_gpio.debug set '{"level": "DEBUG", "module": "gpio", "status": "close"}'
+	echo "gdbg close success"
+elif [ "$status" == "open" ];then
+	ubus call wds_gpio.debug set '{"level": "DEBUG", "module": "gpio", "status": "open", "tty": "'"$console"'"}'
+	echo "gdbg open success"
+elif [ "$status" == "help" -o "$status" == "--help" ];then
+	echo "gdbg [open|close]"
+	echo '  --Open "rg_wds_gpio" debug log'
+	echo '  --Close "rg_wds_gpio" debug log'
+else
+	echo 'The parameter for "gdbg" is invalid  Format: gdbg [open|close]'
+fi
+

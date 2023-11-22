@@ -1,0 +1,231 @@
+1. 调用接口
+    dev_sta get -m wds_list_all
+
+              "channf": "-101",    //信道底噪
+              "chutil": "18"       //信道利用率
+              "onlineTime": "184319",                      //设备开机到现在的秒数，帮忙转换为设备开机时间
+
+          
+    弱 <-69  
+    中 -69 < -49
+    强 > -49
+    
+2. 数据
+{
+  "list_all": [
+    {
+      "list_pair": [
+        {
+          "sn": "G1MQ4XG0014418",
+          "mac": "00:74:9c:aa:54:5e",
+          "ssid": "@Ruijie-wds-5474",
+          "softversion": "AP_3.0(1)B2P11,Release(05222520)",
+          "role": "ap",
+          "userIp": "192.168.123.40",
+          "peersn": "",
+          "onlineTime": "16645",
+          "band": "5.8G",
+          "rssi": "-20",
+          "rxrate": "200",
+          "channel": "48",
+          "passwd": "U2FsdGVkX19si8AFScMf2H59ouuF1rUeUkRfmXnP6gA=",
+          "channf": "-101  ",
+          "chutil": "25  ",
+          "distance": "4000",
+          "txpower": "24",
+          "phymode": "IEEE80211_MODE_11AC_VHT40",
+          "netmask": "255.255.255.0",
+          "lock": "lock"
+        },
+        {
+          "sn": "G1MQ4XG0014413",
+          "mac": "00:74:9c:aa:54:5e",
+          "ssid": "@Ruijie-wds-5474",
+          "softversion": "AP_3.0(1)B2P11,Release(05222520)",
+          "role": "cpe",
+          "userIp": "192.168.123.40",
+          "peersn": "G1MQ4XG0014418",
+          "onlineTime": "16639",
+          "band": "5.8G",
+          "rssi": "-20",
+          "rxrate": "200",
+          "channel": "48",
+          "passwd": "U2FsdGVkX19si8AFScMf2H59ouuF1rUeUkRfmXnP6gA=",
+          "channf": "-101  ",
+          "chutil": "26  ",
+          "distance": "4000",
+          "txpower": "24",
+          "phymode": "IEEE80211_MODE_11AC_VHT40",
+          "netmask": "255.255.255.0",
+          "lock": "lock"
+        }
+      ]
+    },
+    {
+      "list_pair": [
+        {
+          "sn": "G1MQ4XG0014415",
+          "mac": "00:74:9c:aa:54:5e",
+          "ssid": "@Ruijie-wds-5474",
+          "softversion": "AP_3.0(1)B2P11,Release(05222520)",
+          "role": "cpe",
+          "userIp": "192.168.123.40",
+          "peersn": "G1MQ4XG0014419",
+          "onlineTime": "16641",
+          "band": "5.8G",
+          "rssi": "-20",
+          "rxrate": "200",
+          "channel": "48",
+          "passwd": "U2FsdGVkX19si8AFScMf2H59ouuF1rUeUkRfmXnP6gA=",
+          "channf": "-101  ",
+          "chutil": "25  ",
+          "distance": "4000",
+          "txpower": "24",
+          "phymode": "IEEE80211_MODE_11AC_VHT40",
+          "netmask": "255.255.255.0",
+          "lock": "lock"
+        },
+        {
+          "sn": "G1MQ4XG0014416",
+          "mac": "00:74:9c:aa:54:5e",
+          "ssid": "@Ruijie-wds-5474",
+          "softversion": "AP_3.0(1)B2P11,Release(05222520)",
+          "role": "cpe",
+          "userIp": "192.168.123.40",
+          "peersn": "G1MQ4XG0014419",
+          "onlineTime": "16642",
+          "band": "5.8G",
+          "rssi": "-20",
+          "rxrate": "200",
+          "channel": "48",
+          "passwd": "U2FsdGVkX19si8AFScMf2H59ouuF1rUeUkRfmXnP6gA=",
+          "channf": "-101  ",
+          "chutil": "25  ",
+          "distance": "4000",
+          "txpower": "24",
+          "phymode": "IEEE80211_MODE_11AC_VHT40",
+          "netmask": "255.255.255.0",
+          "lock": "lock"
+        },
+        {
+          "sn": "G1MQ4XG0014417",
+          "mac": "00:74:9c:aa:54:5e",
+          "ssid": "@Ruijie-wds-5474",
+          "softversion": "AP_3.0(1)B2P11,Release(05222520)",
+          "role": "cpe",
+          "userIp": "192.168.123.40",
+          "peersn": "G1MQ4XG0014419",
+          "onlineTime": "16643",
+          "band": "5.8G",
+          "rssi": "-20",
+          "rxrate": "200",
+          "channel": "48",
+          "passwd": "U2FsdGVkX19si8AFScMf2H59ouuF1rUeUkRfmXnP6gA=",
+          "channf": "-101  ",
+          "chutil": "25  ",
+          "distance": "4000",
+          "txpower": "24",
+          "phymode": "IEEE80211_MODE_11AC_VHT40",
+          "netmask": "255.255.255.0",
+          "lock": "lock"
+        },
+        {
+          "sn": "G1MQ4XG0014419",
+          "mac": "00:74:9c:aa:54:5e",
+          "ssid": "@Ruijie-wds-5474",
+          "softversion": "AP_3.0(1)B2P11,Release(05222520)",
+          "role": "ap",
+          "userIp": "192.168.123.40",
+          "peersn": "",
+          "onlineTime": "16646",
+          "band": "5.8G",
+          "rssi": "-20",
+          "rxrate": "200",
+          "channel": "48",
+          "passwd": "U2FsdGVkX19si8AFScMf2H59ouuF1rUeUkRfmXnP6gA=",
+          "channf": "-101  ",
+          "chutil": "25  ",
+          "distance": "4000",
+          "txpower": "24",
+          "phymode": "IEEE80211_MODE_11AC_VHT40",
+          "netmask": "255.255.255.0",
+          "lock": "lock"
+        },
+        {
+          "sn": "G1MQ4XG0014414",
+          "mac": "00:74:9c:aa:54:5e",
+          "ssid": "@Ruijie-wds-5474",
+          "softversion": "AP_3.0(1)B2P11,Release(05222520)",
+          "role": "cpe",
+          "userIp": "192.168.123.40",
+          "peersn": "G1MQ4XG0014419",
+          "onlineTime": "16640",
+          "band": "5.8G",
+          "rssi": "-20",
+          "rxrate": "200",
+          "channel": "48",
+          "passwd": "U2FsdGVkX19si8AFScMf2H59ouuF1rUeUkRfmXnP6gA=",
+          "channf": "-101  ",
+          "chutil": "26  ",
+          "distance": "4000",
+          "txpower": "24",
+          "phymode": "IEEE80211_MODE_11AC_VHT40",
+          "netmask": "255.255.255.0",
+          "lock": "lock"
+        }
+      ]
+    },
+    {
+      "list_pair": [
+        {
+          "sn": "G1MQ4XG00144110",
+          "mac": "00:74:9c:aa:54:5e",
+          "ssid": "@Ruijie-wds-5474",
+          "softversion": "AP_3.0(1)B2P11,Release(05222520)",
+          "role": "ap",
+          "userIp": "192.168.123.40",
+          "peersn": "",
+          "onlineTime": "16647",
+          "band": "5.8G",
+          "rssi": "-20",
+          "rxrate": "200",
+          "channel": "48",
+          "passwd": "U2FsdGVkX19si8AFScMf2H59ouuF1rUeUkRfmXnP6gA=",
+          "channf": "-101  ",
+          "chutil": "25  ",
+          "distance": "4000",
+          "txpower": "24",
+          "phymode": "IEEE80211_MODE_11AC_VHT40",
+          "netmask": "255.255.255.0",
+          "lock": "lock"
+        }
+      ]
+    },
+    {
+      "list_pair": [
+        {
+          "sn": "G1MQ4XG00144111",
+          "mac": "00:74:9c:aa:54:5e",
+          "ssid": "@Ruijie-wds-5474",
+          "softversion": "AP_3.0(1)B2P11,Release(05222520)",
+          "role": "cpe",
+          "userIp": "192.168.123.40",
+          "peersn": "",
+          "onlineTime": "16648",
+          "band": "5.8G",
+          "rssi": "-20",
+          "rxrate": "200",
+          "channel": "48",
+          "passwd": "U2FsdGVkX19si8AFScMf2H59ouuF1rUeUkRfmXnP6gA=",
+          "channf": "-101  ",
+          "chutil": "25  ",
+          "distance": "4000",
+          "txpower": "24",
+          "phymode": "IEEE80211_MODE_11AC_VHT40",
+          "netmask": "255.255.255.0",
+          "lock": "lock"
+        }
+      ]
+    }
+  ]
+}

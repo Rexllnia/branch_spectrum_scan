@@ -1,0 +1,12 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2021 ruijie
+
+START=51
+STOP=100
+
+start() {
+	if [ -f /sbin/config_modif.sh ];then
+		echo "starting config_modif"
+		/sbin/config_modif.sh &
+	fi
+}

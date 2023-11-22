@@ -1,0 +1,51 @@
+#!/bin/sh /etc/rc.common
+. /lib/functions.sh
+
+START=99
+STOP=100
+#USE_PROCD=1
+
+USR_PROC=/usr/sbin/spectrum_scan.elf
+start_service() {
+    echo "running ${USR_PROC} ......"
+    procd_open_instance
+    procd_set_param command ${USR_PROC}
+    procd_set_param respawn
+    procd_close_instance
+}
+
+start() {
+
+    if [ -e /tmp/spectrum_scan/curl_pid ] ; then
+        kill -9 $(cat /tmp/spectrum_scan/curl_pid) &> /dev/null
+	    rm /tmp/spectrum_scan/curl_pid &> /dev/null
+    fi
+    killall -9 unifyframe-sgi.elf
+    /etc/init.d/unifyframe-sgi restart
+    ${USR_PROC} &
+
+    echo "spectrum_scan has start."
+}
+
+stop() {
+    killall -9 unifyframe-sgi.elf
+    /etc/init.d/unifyframe-sgi restart
+    killall -9 spectrum_scan.elf
+
+    if [ -e /tmp/spectrum_scan/curl_pid ] ; then
+        kill -9 $(cat /tmp/spectrum_scan/curl_pid) &> /dev/null
+        rm /tmp/spectrum_scan/curl_pid &> /dev/null
+    fi
+
+    echo "spectrum_scan has stopped."
+}
+
+boot() {
+    start "$@"
+}
+
+restart() {
+    trap '' TERM
+    stop "$@"
+    start "$@"
+}

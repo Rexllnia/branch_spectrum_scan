@@ -1,0 +1,38 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2015 ruijie
+
+START=98
+STOP=100
+
+PROC1="/sbin/rg_wds_gpio"
+PROC2="wds_gpio.sh"
+PROC3="wds_manage_ssid.sh"
+PROC4="wds_random_chan.sh"
+
+SERVICE_DAEMONIZE=1
+start() {
+    echo "starting wds gpio"
+	service_start $PROC1
+	service_start /sbin/$PROC2
+	service_start /sbin/$PROC3
+	service_start /sbin/$PROC4
+}
+
+stop() {
+    echo "stop wds gpio."
+    killall $PROC4
+	killall $PROC3
+	killall $PROC2
+	service_stop $PROC1
+
+}
+
+boot() {
+    start "$@"
+}
+
+restart() {
+	echo "wds gpio restart..."
+    stop "$@"
+    start "$@"
+}
